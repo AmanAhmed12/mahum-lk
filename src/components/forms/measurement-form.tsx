@@ -75,7 +75,9 @@ export function MeasurementForm({ initialValues, onSuccess, onCancel }: Measurem
               id={field.name}
               type="number"
               step="0.1"
-              {...register(field.name, { valueAsNumber: true })}
+              {...register(field.name, {
+                setValueAs: (value) => (value === "" || value === null ? undefined : Number(value)),
+              })}
             />
           </div>
         ))}

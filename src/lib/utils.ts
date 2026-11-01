@@ -11,8 +11,8 @@ const currencyFormatter = new Intl.NumberFormat("en-LK", {
   maximumFractionDigits: 2,
 });
 
-export function formatCurrency(amount: number | string): string {
-  const value = typeof amount === "string" ? Number(amount) : amount;
+export function formatCurrency(amount: number | string | null | undefined): string {
+  const value = typeof amount === "number" ? amount : Number(amount ?? 0);
   return currencyFormatter.format(Number.isFinite(value) ? value : 0);
 }
 
