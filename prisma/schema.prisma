@@ -1,0 +1,300 @@
+// Prisma schema for the Mahum.lk Tailoring & Inventory Management System
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  SERVICE_PROVIDER
+  CUSTOMER
+}
+
+enum OrderType {
+  PRODUCT
+  TAILORING
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  COD
+  CARD
+  BANK_TRANSFER
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum DeliveryStatus {
+  PENDING
+  DISPATCHED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  FAILED
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+}
+
+model User {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  passwordHash     String
+  name             String
+  phone            String?
+  role             Role      @default(CUSTOMER)
+  avatarUrl        String?
+  refreshTokenHash String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  customerProfile        CustomerProfile?
+  serviceProviderProfile ServiceProviderProfile?
+  chatConversations      ChatConversation[]
+
+  @@map("users")
+}
+
+model CustomerProfile {
+  id           String        @id @default(cuid())
+  userId       String        @unique
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address      String?
+  city         String?
+  measurements Measurement[]
+  orders       Order[]
+  reviews      Review[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@map("customer_profiles")
+}
+
+model ServiceProviderProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialization  String?
+  experienceYears Int?
+  orders          Order[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("service_provider_profiles")
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  slug      String    @unique
+  imageUrl  String?
+  publicId  String?
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("categories")
+}
+
+model Product {
+  id            String      @id @default(cuid())
+  name          String
+  slug          String      @unique
+  description   String
+  sku           String      @unique
+  price         Decimal     @db.Decimal(10, 2)
+  discountPrice Decimal?    @db.Decimal(10, 2)
+  images        ProductImage[]
+  categoryId    String
+  category      Category    @relation(fields: [categoryId], references: [id])
+  isActive      Boolean     @default(true)
+  inventory     Inventory?
+  orderItems    OrderItem[]
+  reviews       Review[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([categoryId])
+  @@map("products")
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  publicId  String
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+model Inventory {
+  id           String   @id @default(cuid())
+  productId    String   @unique
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity     Int      @default(0)
+  reorderLevel Int      @default(5)
+  updatedAt    DateTime @updatedAt
+
+  @@map("inventory")
+}
+
+model Service {
+  id          String      @id @default(cuid())
+  name        String
+  description String
+  basePrice   Decimal     @db.Decimal(10, 2)
+  isActive    Boolean     @default(true)
+  orderItems  OrderItem[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("services")
+}
+
+model Measurement {
+  id             String          @id @default(cuid())
+  customerId     String
+  customer       CustomerProfile @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  label          String
+  heightCm       Float?
+  chestCm        Float?
+  waistCm        Float?
+  hipCm          Float?
+  shoulderCm     Float?
+  sleeveLengthCm Float?
+  inseamCm       Float?
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  orderItems     OrderItem[]
+
+  @@index([customerId])
+  @@map("measurements")
+}
+
+model Order {
+  id          String                   @id @default(cuid())
+  customerId  String
+  customer    CustomerProfile          @relation(fields: [customerId], references: [id])
+  providerId  String?
+  provider    ServiceProviderProfile?  @relation(fields: [providerId], references: [id])
+  type        OrderType
+  status      OrderStatus              @default(PENDING)
+  totalAmount Decimal                  @db.Decimal(10, 2)
+  notes       String?
+  items       OrderItem[]
+  payment     Payment?
+  delivery    Delivery?
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  @@index([customerId])
+  @@index([providerId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id            String       @id @default(cuid())
+  orderId       String
+  order         Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId     String?
+  product       Product?     @relation(fields: [productId], references: [id])
+  serviceId     String?
+  service       Service?     @relation(fields: [serviceId], references: [id])
+  measurementId String?
+  measurement   Measurement? @relation(fields: [measurementId], references: [id])
+  quantity      Int          @default(1)
+  unitPrice     Decimal      @db.Decimal(10, 2)
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  orderId        String        @unique
+  order          Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  amount         Decimal       @db.Decimal(10, 2)
+  method         PaymentMethod
+  status         PaymentStatus @default(PENDING)
+  transactionRef String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@map("payments")
+}
+
+model Delivery {
+  id             String         @id @default(cuid())
+  orderId        String         @unique
+  order          Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  address        String
+  city           String
+  method         String         @default("Courier")
+  status         DeliveryStatus @default(PENDING)
+  trackingNumber String?
+  deliveredAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@map("deliveries")
+}
+
+model Review {
+  id         String          @id @default(cuid())
+  productId  String
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   CustomerProfile @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  rating     Int
+  comment    String?
+  createdAt  DateTime        @default(now())
+
+  @@index([productId])
+  @@map("reviews")
+}
+
+model ChatConversation {
+  id        String        @id @default(cuid())
+  userId    String?
+  user      User?         @relation(fields: [userId], references: [id])
+  messages  ChatMessage[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@map("chat_conversations")
+}
+
+model ChatMessage {
+  id             String           @id @default(cuid())
+  conversationId String
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           ChatRole
+  content        String
+  createdAt      DateTime         @default(now())
+
+  @@index([conversationId])
+  @@map("chat_messages")
+}
