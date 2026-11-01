@@ -5,7 +5,7 @@ import { MessageCircle, Send, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { apiJson } from "@/lib/api/client";
+import { apiFetch } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 
 interface ChatMessage {
@@ -40,38 +40,64 @@ export function ChatWidget() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, open]);
 
+  function updateLastAssistantMessage(content: string) {
+    setMessages((prev) => {
+      const next = [...prev];
+      next[next.length - 1] = { role: "assistant", content };
+      return next;
+    });
+  }
+
   async function sendMessage(event: React.FormEvent) {
     event.preventDefault();
     const text = input.trim();
     if (!text || isSending) return;
 
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
+    setMessages((prev) => [...prev, { role: "user", content: text }, { role: "assistant", content: "" }]);
     setInput("");
     setIsSending(true);
 
     try {
-      const data = await apiJson<{ conversationId: string; reply: string }>("/api/chat", {
+      const response = await apiFetch("/api/chat", {
         method: "POST",
         body: JSON.stringify({ conversationId: conversationIdRef.current, message: text }),
       });
-      conversationIdRef.current = data.conversationId;
-      try {
-        sessionStorage.setItem(STORAGE_KEY, data.conversationId);
-      } catch {
-        // sessionStorage may be unavailable (e.g. privacy mode) — safe to ignore.
+
+      if (!response.ok || !response.body) {
+        const data = await response.json().catch(() => null);
+        throw new Error((data?.error as string) || "Something went wrong. Please try again.");
       }
-      setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
+
+      const newConversationId = response.headers.get("X-Conversation-Id");
+      if (newConversationId) {
+        conversationIdRef.current = newConversationId;
+        try {
+          sessionStorage.setItem(STORAGE_KEY, newConversationId);
+        } catch {
+          // sessionStorage may be unavailable (e.g. privacy mode) — safe to ignore.
+        }
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulated = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        accumulated += decoder.decode(value, { stream: true });
+        updateLastAssistantMessage(accumulated);
+      }
+
+      if (!accumulated.trim()) {
+        updateLastAssistantMessage("Sorry, I couldn't generate a response. Please try again.");
+      }
     } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content:
-            error instanceof Error
-              ? `Sorry, something went wrong: ${error.message}`
-              : "Sorry, something went wrong. Please try again.",
-        },
-      ]);
+      updateLastAssistantMessage(
+        error instanceof Error
+          ? `Sorry, something went wrong: ${error.message}`
+          : "Sorry, something went wrong. Please try again.",
+      );
     } finally {
       setIsSending(false);
     }
@@ -89,30 +115,31 @@ export function ChatWidget() {
           </div>
 
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
-            {messages.map((message, index) => (
-              <div
-                key={index}
-                className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}
-              >
-                <p
-                  className={cn(
-                    "max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm",
-                    message.role === "user"
-                      ? "bg-brand-600 text-white"
-                      : "bg-surface-muted text-foreground",
-                  )}
+            {messages.map((message, index) => {
+              const isStreamingPlaceholder =
+                isSending && index === messages.length - 1 && message.role === "assistant" && !message.content;
+              return (
+                <div
+                  key={index}
+                  className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}
                 >
-                  {message.content}
-                </p>
-              </div>
-            ))}
-            {isSending ? (
-              <div className="flex justify-start">
-                <p className="rounded-lg bg-surface-muted px-3 py-2 text-sm text-neutral-500">
-                  Typing…
-                </p>
-              </div>
-            ) : null}
+                  <p
+                    className={cn(
+                      "max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm",
+                      message.role === "user"
+                        ? "bg-brand-600 text-white"
+                        : "bg-surface-muted text-foreground",
+                    )}
+                  >
+                    {isStreamingPlaceholder ? (
+                      <span className="text-neutral-500">Typing…</span>
+                    ) : (
+                      message.content
+                    )}
+                  </p>
+                </div>
+              );
+            })}
           </div>
 
           <form onSubmit={sendMessage} className="flex items-center gap-2 border-t border-border-muted p-3">

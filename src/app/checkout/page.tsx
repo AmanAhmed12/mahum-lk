@@ -15,7 +15,8 @@ import { useCartStore } from "@/store/cartStore";
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { user, isInitialized } = useAuthStore((s) => ({ user: s.user, isInitialized: s.isInitialized }));
+  const user = useAuthStore((s) => s.user);
+  const isInitialized = useAuthStore((s) => s.isInitialized);
   const items = useCartStore((s) => s.items);
   const totalPrice = useCartStore((s) => s.totalPrice());
   const clearCart = useCartStore((s) => s.clear);

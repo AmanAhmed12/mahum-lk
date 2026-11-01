@@ -4,7 +4,7 @@ import { FunctionCallingConfigMode, GoogleGenAI, Type, type FunctionDeclaration 
 
 const apiKey = process.env.GEMINI_API_KEY;
 
-export const CHAT_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+export const CHAT_MODEL = process.env.GEMINI_MODEL || "gemini-flash-lite-latest";
 
 let client: GoogleGenAI | null = null;
 
@@ -14,7 +14,18 @@ export function getGeminiClient(): GoogleGenAI {
     throw new Error("GEMINI_API_KEY is not set. Copy .env.example to .env and fill it in.");
   }
   if (!client) {
-    client = new GoogleGenAI({ apiKey });
+    client = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        // The SDK retries 429/5xx up to 5x with exponential backoff by
+        // default (can take 60s+ to finally surface an error). We want a
+        // snappy chatbot, so we fail fast here and handle a single retry
+        // ourselves at the call site (see isRetryableGeminiError in
+        // app/api/chat/route.ts) instead of stacking two retry policies.
+        timeout: 15_000,
+        retryOptions: { attempts: 1 },
+      },
+    });
   }
   return client;
 }

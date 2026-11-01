@@ -22,7 +22,8 @@ interface ServiceRecord {
 
 export function TailoringRequestForm() {
   const router = useRouter();
-  const { user, isInitialized } = useAuthStore((s) => ({ user: s.user, isInitialized: s.isInitialized }));
+  const user = useAuthStore((s) => s.user);
+  const isInitialized = useAuthStore((s) => s.isInitialized);
 
   const [services, setServices] = React.useState<ServiceRecord[]>([]);
   const [measurements, setMeasurements] = React.useState<MeasurementRecord[]>([]);

@@ -1,6 +1,5 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
-import type { Content, Part } from "@google/genai";
+import type { Content, FunctionCall, Part } from "@google/genai";
 
 import { handleApiError } from "@/lib/api/errors";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -38,6 +37,29 @@ async function lookupOrderStatus(orderId: string, customerProfileId: string | nu
   };
 }
 
+function isRetryableGeminiError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /"code":\s*(503|429)|UNAVAILABLE|RESOURCE_EXHAUSTED/i.test(message);
+}
+
+async function resolveFunctionCalls(calls: FunctionCall[], customerProfileId: string | null): Promise<Part[]> {
+  const parts: Part[] = [];
+  for (const call of calls) {
+    if (call.name === "lookupOrderStatus") {
+      const orderId = String(call.args?.orderId ?? "");
+      const result = orderId
+        ? await lookupOrderStatus(orderId, customerProfileId)
+        : { error: "No order ID was provided." };
+      parts.push({ functionResponse: { name: call.name, response: result } });
+    } else {
+      parts.push({
+        functionResponse: { name: call.name ?? "unknown", response: { error: "Unknown tool." } },
+      });
+    }
+  }
+  return parts;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -52,13 +74,14 @@ export async function POST(request: Request) {
     if (!conversation || (conversation.userId && conversation.userId !== user?.id)) {
       conversation = await prisma.chatConversation.create({ data: { userId: user?.id ?? null } });
     }
+    const conversationId = conversation.id;
 
     await prisma.chatMessage.create({
-      data: { conversationId: conversation.id, role: "USER", content: input.message },
+      data: { conversationId, role: "USER", content: input.message },
     });
 
     const history = await prisma.chatMessage.findMany({
-      where: { conversationId: conversation.id },
+      where: { conversationId },
       orderBy: { createdAt: "asc" },
       take: MAX_HISTORY_MESSAGES,
     });
@@ -74,38 +97,99 @@ export async function POST(request: Request) {
     const chat = ai.chats.create({
       model: CHAT_MODEL,
       history: priorHistory,
-      config: { systemInstruction: SYSTEM_INSTRUCTION, tools: chatTools },
+      config: { systemInstruction: SYSTEM_INSTRUCTION, tools: chatTools, maxOutputTokens: 512 },
     });
 
-    let response = await chat.sendMessage({ message: input.message });
-    let rounds = 0;
+    const encoder = new TextEncoder();
+    let assistantText = "";
 
-    while (response.functionCalls && response.functionCalls.length > 0 && rounds < MAX_TOOL_ROUNDS) {
-      const responseParts: Part[] = [];
-      for (const call of response.functionCalls) {
-        if (call.name === "lookupOrderStatus") {
-          const orderId = String(call.args?.orderId ?? "");
-          const result = orderId
-            ? await lookupOrderStatus(orderId, user?.customerProfileId ?? null)
-            : { error: "No order ID was provided." };
-          responseParts.push({ functionResponse: { name: call.name, response: result } });
-        } else {
-          responseParts.push({
-            functionResponse: { name: call.name ?? "unknown", response: { error: "Unknown tool." } },
-          });
+    async function runTurn(controller: ReadableStreamDefaultController<Uint8Array>) {
+      let streamResult = await chat.sendMessageStream({ message: input.message });
+      let rounds = 0;
+
+      while (true) {
+        const pendingCalls: FunctionCall[] = [];
+
+        for await (const chunk of streamResult) {
+          if (chunk.functionCalls?.length) {
+            pendingCalls.push(...chunk.functionCalls);
+          }
+          if (chunk.text) {
+            assistantText += chunk.text;
+            safeEnqueue(controller, chunk.text);
+          }
         }
+
+        if (pendingCalls.length === 0 || rounds >= MAX_TOOL_ROUNDS) break;
+
+        const responseParts = await resolveFunctionCalls(pendingCalls, user?.customerProfileId ?? null);
+        rounds += 1;
+        streamResult = await chat.sendMessageStream({ message: responseParts });
       }
-      response = await chat.sendMessage({ message: responseParts });
-      rounds += 1;
     }
 
-    const replyText = response.text?.trim() || "Sorry, I couldn't generate a response. Please try again.";
+    let clientDisconnected = false;
+    let streamClosed = false;
 
-    await prisma.chatMessage.create({
-      data: { conversationId: conversation.id, role: "ASSISTANT", content: replyText },
+    function safeEnqueue(controller: ReadableStreamDefaultController<Uint8Array>, text: string) {
+      if (clientDisconnected || streamClosed) return;
+      try {
+        controller.enqueue(encoder.encode(text));
+      } catch {
+        // The client may have disconnected between our check and this call —
+        // harmless, there is simply no one left to receive the bytes.
+        clientDisconnected = true;
+      }
+    }
+
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        try {
+          try {
+            await runTurn(controller);
+          } catch (error) {
+            // The model backend can be transiently overloaded (503) or rate
+            // limited (429) — both are worth a single quick retry before
+            // giving up, since nothing has been streamed to the user yet.
+            if (!assistantText && !clientDisconnected && isRetryableGeminiError(error)) {
+              await runTurn(controller);
+            } else {
+              throw error;
+            }
+          }
+        } catch (error) {
+          if (!clientDisconnected) console.error("Gemini streaming error:", error);
+          if (!assistantText) {
+            safeEnqueue(controller, "Sorry, I'm having trouble responding right now. Please try again shortly.");
+          }
+        } finally {
+          if (!streamClosed) {
+            streamClosed = true;
+            try {
+              controller.close();
+            } catch {
+              // Already closed/cancelled by the runtime — nothing to do.
+            }
+          }
+          const finalText = assistantText.trim() || "Sorry, I couldn't generate a response. Please try again.";
+          prisma.chatMessage
+            .create({ data: { conversationId, role: "ASSISTANT", content: finalText } })
+            .catch((error) => console.error("Failed to persist assistant chat message:", error));
+        }
+      },
+      cancel() {
+        // The client navigated away or aborted the request mid-stream.
+        clientDisconnected = true;
+      },
     });
 
-    return NextResponse.json({ conversationId: conversation.id, reply: replyText });
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-cache",
+        "X-Conversation-Id": conversationId,
+      },
+    });
   } catch (error) {
     return handleApiError(error);
   }
