@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { OrderDetail } from "@/components/order/order-detail";
+import { PayNowButton } from "@/components/order/pay-now-button";
 import { getCurrentUser } from "@/lib/auth/session";
 import { toOrderDetailData } from "@/lib/mappers/order";
 import prisma from "@/lib/prisma";
@@ -29,5 +30,14 @@ export default async function CustomerOrderDetailPage({ params }: OrderPageProps
 
   if (!order || order.customerId !== user.customerProfileId) notFound();
 
-  return <OrderDetail order={toOrderDetailData(order)} showProvider />;
+  const data = toOrderDetailData(order);
+  const needsPayment = data.payment?.method === "CARD" && data.payment.status !== "PAID";
+
+  return (
+    <OrderDetail
+      order={data}
+      showProvider
+      extraActions={needsPayment ? <PayNowButton orderId={order.id} /> : undefined}
+    />
+  );
 }

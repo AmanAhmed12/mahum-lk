@@ -107,42 +107,49 @@ export async function POST(request: Request) {
       throw new BadRequestError("One or more products in your cart no longer exist.");
     }
 
-    const order = await prisma.$transaction(async (tx) => {
-      let totalAmount = 0;
-      const itemsData: Array<{ productId: string; quantity: number; unitPrice: number }> = [];
+    const order = await prisma.$transaction(
+      async (tx) => {
+        let totalAmount = 0;
+        const itemsData: Array<{ productId: string; quantity: number; unitPrice: number }> = [];
 
-      for (const line of input.items) {
-        const product = products.find((p) => p.id === line.productId)!;
-        if (!product.isActive) {
-          throw new BadRequestError(`"${product.name}" is no longer available.`);
+        for (const line of input.items) {
+          const product = products.find((p) => p.id === line.productId)!;
+          if (!product.isActive) {
+            throw new BadRequestError(`"${product.name}" is no longer available.`);
+          }
+
+          const decremented = await tx.inventory.updateMany({
+            where: { productId: product.id, quantity: { gte: line.quantity } },
+            data: { quantity: { decrement: line.quantity } },
+          });
+          if (decremented.count !== 1) {
+            throw new BadRequestError(`"${product.name}" does not have enough stock.`);
+          }
+
+          const unitPrice = Number(product.discountPrice ?? product.price);
+          totalAmount += unitPrice * line.quantity;
+          itemsData.push({ productId: product.id, quantity: line.quantity, unitPrice });
         }
 
-        const decremented = await tx.inventory.updateMany({
-          where: { productId: product.id, quantity: { gte: line.quantity } },
-          data: { quantity: { decrement: line.quantity } },
+        return tx.order.create({
+          data: {
+            customerId,
+            type: "PRODUCT",
+            status: "PENDING",
+            totalAmount,
+            items: { create: itemsData },
+            payment: { create: { amount: totalAmount, method: input.paymentMethod, status: "PENDING" } },
+            delivery: { create: { address: input.address, city: input.city, status: "PENDING" } },
+          },
+          include: ORDER_INCLUDE,
         });
-        if (decremented.count !== 1) {
-          throw new BadRequestError(`"${product.name}" does not have enough stock.`);
-        }
-
-        const unitPrice = Number(product.discountPrice ?? product.price);
-        totalAmount += unitPrice * line.quantity;
-        itemsData.push({ productId: product.id, quantity: line.quantity, unitPrice });
-      }
-
-      return tx.order.create({
-        data: {
-          customerId,
-          type: "PRODUCT",
-          status: "PENDING",
-          totalAmount,
-          items: { create: itemsData },
-          payment: { create: { amount: totalAmount, method: input.paymentMethod, status: "PENDING" } },
-          delivery: { create: { address: input.address, city: input.city, status: "PENDING" } },
-        },
-        include: ORDER_INCLUDE,
-      });
-    });
+      },
+      // Neon's serverless (HTTP/WebSocket) driver can add noticeable
+      // per-query latency, especially on a cold connection — the 5s default
+      // interactive-transaction timeout is too tight for a multi-query
+      // transaction like this one.
+      { timeout: 15_000, maxWait: 10_000 },
+    );
 
     return NextResponse.json({ order }, { status: 201 });
   } catch (error) {

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { PageSpinner } from "@/components/ui/spinner";
 import { apiJson } from "@/lib/api/client";
+import { redirectToPayHereCheckout } from "@/lib/payhere-client";
 import { formatCurrency } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 
@@ -92,6 +93,13 @@ export function TailoringRequestForm() {
           notes,
         }),
       });
+
+      if (paymentMethod === "CARD") {
+        toast.success("Request submitted! Redirecting to the secure payment page...");
+        await redirectToPayHereCheckout(data.order.id);
+        return; // the browser is navigating away to PayHere
+      }
+
       toast.success("Tailoring request submitted!");
       router.push(`/account/orders/${data.order.id}`);
     } catch (error) {
