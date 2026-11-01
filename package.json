@@ -6,7 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "postinstall": "prisma generate",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
     "@google/genai": "^2.32.0",
@@ -15,7 +21,9 @@
     "@prisma/adapter-neon": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "bcryptjs": "^3.0.3",
+    "class-variance-authority": "^0.7.1",
     "cloudinary": "^2.11.0",
+    "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "jose": "^6.2.14",
     "lucide-react": "^1.66.0",
@@ -23,6 +31,8 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-hook-form": "^7.91.0",
+    "sonner": "^2.0.8",
+    "tailwind-merge": "^3.7.0",
     "ws": "^8.22.1",
     "zod": "^4.6.7",
     "zustand": "^5.0.16"
