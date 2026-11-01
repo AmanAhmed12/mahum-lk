@@ -10,7 +10,7 @@ const ROLE_PREFIXES: Array<{ prefix: string; roles: Role[] }> = [
   { prefix: "/account", roles: ["ADMIN", "SERVICE_PROVIDER", "CUSTOMER"] },
 ];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const match = ROLE_PREFIXES.find((entry) => pathname.startsWith(entry.prefix));
   if (!match) {

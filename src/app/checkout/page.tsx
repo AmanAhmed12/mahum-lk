@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import { toast } from "sonner";
@@ -35,7 +36,7 @@ export default function CheckoutPage() {
   if (items.length === 0) {
     return (
       <div className="container-page py-16 text-center text-sm text-neutral-500">
-        Your cart is empty. <a className="text-brand-700 underline" href="/shop">Go shopping</a>.
+        Your cart is empty. <Link className="text-brand-700 underline" href="/shop">Go shopping</Link>.
       </div>
     );
   }

@@ -1,7 +1,7 @@
 // Shared literal types mirrored from prisma/schema.prisma.
 // Kept as plain string literal unions (not imported from the generated
 // Prisma client) so they are safe to use in Edge Runtime code such as
-// middleware.ts, which cannot bundle the Prisma client/engine.
+// proxy.ts, which cannot bundle the Prisma client/engine.
 
 export const ROLES = ["ADMIN", "SERVICE_PROVIDER", "CUSTOMER"] as const;
 export type Role = (typeof ROLES)[number];

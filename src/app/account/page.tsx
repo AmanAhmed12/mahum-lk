@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { StatusBadge } from "@/components/ui/badge";
@@ -51,7 +52,7 @@ export default async function AccountOverviewPage() {
           {recentOrders.length > 0 ? (
             <div className="divide-y divide-border-muted">
               {recentOrders.map((order) => (
-                <a
+                <Link
                   key={order.id}
                   href={`/account/orders/${order.id}`}
                   className="flex items-center justify-between py-3 text-sm hover:bg-surface-muted"
@@ -66,7 +67,7 @@ export default async function AccountOverviewPage() {
                     <span className="font-medium text-foreground">{formatCurrency(order.totalAmount.toString())}</span>
                     <StatusBadge status={order.status} />
                   </div>
-                </a>
+                </Link>
               ))}
             </div>
           ) : (

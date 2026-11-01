@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import { toast } from "sonner";
@@ -59,9 +60,9 @@ export function TailoringRequestForm() {
     return (
       <div className="container-page py-16 text-center text-sm text-neutral-500">
         Please{" "}
-        <a href="/login?from=/services/request" className="text-brand-700 underline">
+        <Link href="/login?from=/services/request" className="text-brand-700 underline">
           log in
-        </a>{" "}
+        </Link>{" "}
         as a customer to request a tailoring service.
       </div>
     );

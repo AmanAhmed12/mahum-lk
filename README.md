@@ -1,36 +1,124 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Mahum.lk — Tailoring, Fashion Accessories & Inventory Management
 
-## Getting Started
+A full-stack Next.js rebuild of the Mahum.lk web-based tailoring and inventory
+management system (see `../Interim Report E300090.docx` and `../instructions.txt`
+for the original requirements and build plan).
 
-First, run the development server:
+Stack: **Next.js 16 (App Router, frontend + backend)**, **Neon (Postgres)**
+via **Prisma 7**, **JWT** authentication, **Google Gemini** chatbot,
+**Cloudinary** image storage. Every service used has a free tier.
+
+## 1. Prerequisites
+
+- Node.js 20+ and npm
+- Free accounts (no credit card required for the free tiers used here):
+  - [Neon](https://neon.tech) — Postgres database
+  - [Cloudinary](https://cloudinary.com) — image storage/CDN
+  - [Google AI Studio](https://aistudio.google.com/app/apikey) — Gemini API key
+
+## 2. Configure environment variables
+
+Copy the example file and fill in your own values:
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` and replace every `<PLACEHOLDER>`:
+
+| Variable | Where to get it |
+| --- | --- |
+| `DATABASE_URL` | Neon dashboard → your project → "Pooled connection" string |
+| `DIRECT_URL` | Neon dashboard → your project → "Direct connection" string |
+| `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | Generate with `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"` (run twice, once per secret) |
+| `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` | Cloudinary dashboard → Account Details |
+| `GEMINI_API_KEY` | Google AI Studio → "Get API key" |
+
+`NEXT_PUBLIC_APP_URL` can stay as `http://localhost:3000` for local development.
+
+## 3. Install dependencies
+
+```bash
+npm install
+```
+
+(This also runs `prisma generate` automatically via the `postinstall` script.)
+
+## 4. Set up the database
+
+```bash
+npm run db:migrate   # creates all tables in your Neon database
+npm run db:seed       # adds demo categories, products, services and one
+                      # account per role (Admin / Service Provider / Customer)
+```
+
+Demo logins created by the seed script:
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Admin | `admin@mahum.lk` | `Admin@12345` |
+| Service Provider | `provider@mahum.lk` | `Provider@12345` |
+| Customer | `customer@mahum.lk` | `Customer@12345` |
+
+**Change or remove these before deploying publicly.**
+
+## 5. Run the app
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 6. Useful scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the local dev server |
+| `npm run build` | Production build (type-checks the whole project) |
+| `npm run start` | Run the production build |
+| `npm run lint` | ESLint |
+| `npm run db:migrate` | Apply Prisma migrations (dev) |
+| `npm run db:deploy` | Apply Prisma migrations (production) |
+| `npm run db:seed` | Re-run the seed script |
+| `npm run db:studio` | Open Prisma Studio (visual DB browser) |
 
-## Learn More
+## 7. Project structure
 
-To learn more about Next.js, take a look at the following resources:
+See `instructions.txt` in the parent folder for the full architecture
+write-up (data model, auth design, API route list, build phases). In short:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+src/
+  app/            Pages (public shop, /account, /provider, /admin) + API routes
+  components/     UI primitives, layout, product/cart/order/chat/admin widgets
+  lib/             Prisma client, auth (JWT/RBAC), Cloudinary, Gemini, validators
+  store/           Zustand stores (cart, client-side auth state)
+  types/           Shared literal types (roles, statuses)
+  proxy.ts         Edge request interceptor — enforces role-based access to
+                   /admin, /provider and /account (Next.js 16 renamed the
+                   "middleware" file convention to "proxy")
+prisma/
+  schema.prisma    Data model (Users, Products, Orders, Measurements, ...)
+  seed.ts          Demo data
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 8. Deploying (free tier)
 
-## Deploy on Vercel
+1. Push this repo to GitHub.
+2. Import it into [Vercel](https://vercel.com) (free Hobby plan).
+3. Add every variable from `.env` to the Vercel project's Environment Variables,
+   using your production Neon/Cloudinary/Gemini credentials and
+   `NEXT_PUBLIC_APP_URL` set to your Vercel URL.
+4. Run `npm run db:deploy` once against your production database (locally,
+   with the production `DIRECT_URL`) before the first deploy.
+5. Deploy. `postinstall` runs `prisma generate` automatically during the
+   Vercel build.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Notes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `npm audit` may report a handful of moderate-severity advisories inside
+  the ESLint toolchain's dependency tree (`minimatch` ReDoS). These are
+  development-only dependencies (not part of the shipped app) with no
+  non-breaking fix published yet upstream; they do not affect the running
+  application.

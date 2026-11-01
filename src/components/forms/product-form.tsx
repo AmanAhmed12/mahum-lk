@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import * as React from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
+import type { z } from "zod";
 
 import { ImageUploader, type UploadedImage } from "@/components/forms/image-uploader";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,8 @@ import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/inpu
 import { apiJson } from "@/lib/api/client";
 import { slugify } from "@/lib/utils";
 import { productSchema, type ProductInput } from "@/lib/validators/catalogue";
+
+type ProductFormValues = z.input<typeof productSchema>;
 
 interface CategoryOption {
   id: string;
@@ -36,10 +39,10 @@ export function ProductForm({
     register,
     handleSubmit,
     control,
-    watch,
+    getValues,
     setValue,
     formState: { errors, isSubmitting },
-  } = useForm<ProductInput>({
+  } = useForm<ProductFormValues, unknown, ProductInput>({
     resolver: zodResolver(productSchema),
     defaultValues: initialValues ?? {
       name: "",
@@ -54,8 +57,6 @@ export function ProductForm({
       reorderLevel: 5,
     },
   });
-
-  const nameValue = watch("name");
 
   async function onSubmit(values: ProductInput) {
     try {
@@ -81,7 +82,7 @@ export function ProductForm({
           id="name"
           {...register("name")}
           onBlur={() => {
-            if (!isEditing) setValue("slug", slugify(nameValue || ""));
+            if (!isEditing) setValue("slug", slugify(getValues("name") || ""));
           }}
         />
         <FieldError message={errors.name?.message} />

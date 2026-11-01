@@ -5,12 +5,14 @@ import { Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 
+type DecimalLike = number | string | { toString(): string };
+
 export interface ProductCardData {
   id: string;
   name: string;
   slug: string;
-  price: number | string;
-  discountPrice: number | string | null;
+  price: DecimalLike;
+  discountPrice: DecimalLike | null;
   images: { url: string }[];
   inventory: { quantity: number } | null;
   reviews: { rating: number }[];

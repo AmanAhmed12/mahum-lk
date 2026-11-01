@@ -4,11 +4,14 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as React from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
+import type { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Textarea } from "@/components/ui/input";
 import { apiJson } from "@/lib/api/client";
 import { measurementSchema, type MeasurementInput } from "@/lib/validators/orders";
+
+type MeasurementFormValues = z.input<typeof measurementSchema>;
 
 export interface MeasurementRecord extends MeasurementInput {
   id: string;
@@ -20,7 +23,7 @@ interface MeasurementFormProps {
   onCancel?: () => void;
 }
 
-const FIELDS: Array<{ name: keyof MeasurementInput; label: string }> = [
+const FIELDS: Array<{ name: keyof MeasurementFormValues; label: string }> = [
   { name: "heightCm", label: "Height (cm)" },
   { name: "chestCm", label: "Chest (cm)" },
   { name: "waistCm", label: "Waist (cm)" },
@@ -35,7 +38,7 @@ export function MeasurementForm({ initialValues, onSuccess, onCancel }: Measurem
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<MeasurementInput>({
+  } = useForm<MeasurementFormValues, unknown, MeasurementInput>({
     resolver: zodResolver(measurementSchema),
     defaultValues: initialValues ?? { label: "" },
   });
