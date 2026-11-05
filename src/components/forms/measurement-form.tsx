@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,7 +10,10 @@ import type { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Textarea } from "@/components/ui/input";
 import { apiJson } from "@/lib/api/client";
-import { measurementSchema, type MeasurementInput } from "@/lib/validators/orders";
+import {
+  measurementSchema,
+  type MeasurementInput,
+} from "@/lib/validators/orders";
 
 type MeasurementFormValues = z.input<typeof measurementSchema>;
 
@@ -23,17 +27,24 @@ interface MeasurementFormProps {
   onCancel?: () => void;
 }
 
-const FIELDS: Array<{ name: keyof MeasurementFormValues; label: string }> = [
-  { name: "heightCm", label: "Height (cm)" },
-  { name: "chestCm", label: "Chest (cm)" },
-  { name: "waistCm", label: "Waist (cm)" },
-  { name: "hipCm", label: "Hip (cm)" },
-  { name: "shoulderCm", label: "Shoulder (cm)" },
-  { name: "sleeveLengthCm", label: "Sleeve Length (cm)" },
-  { name: "inseamCm", label: "Inseam (cm)" },
-];
+const FIELDS: Array<{
+  name: keyof MeasurementFormValues;
+  label: string;
+}> = [
+    { name: "heightCm", label: "Height (cm)" },
+    { name: "chestCm", label: "Chest (cm)" },
+    { name: "waistCm", label: "Waist (cm)" },
+    { name: "hipCm", label: "Hip (cm)" },
+    { name: "shoulderCm", label: "Shoulder (cm)" },
+    { name: "sleeveLengthCm", label: "Sleeve Length (cm)" },
+    { name: "inseamCm", label: "Inseam (cm)" },
+  ];
 
-export function MeasurementForm({ initialValues, onSuccess, onCancel }: MeasurementFormProps) {
+export function MeasurementForm({
+  initialValues,
+  onSuccess,
+  onCancel,
+}: MeasurementFormProps) {
   const {
     register,
     handleSubmit,
@@ -45,28 +56,47 @@ export function MeasurementForm({ initialValues, onSuccess, onCancel }: Measurem
 
   async function onSubmit(values: MeasurementInput) {
     try {
-      const measurement = initialValues
-        ? await apiJson<{ measurement: MeasurementRecord }>(`/api/measurements/${initialValues.id}`, {
+      const response = initialValues
+        ? await apiJson<{ measurement: MeasurementRecord }>(
+          `/api/measurements/${initialValues.id}`,
+          {
             method: "PATCH",
             body: JSON.stringify(values),
-          }).then((d) => d.measurement)
-        : await apiJson<{ measurement: MeasurementRecord }>("/api/measurements", {
+          }
+        )
+        : await apiJson<{ measurement: MeasurementRecord }>(
+          "/api/measurements",
+          {
             method: "POST",
             body: JSON.stringify(values),
-          }).then((d) => d.measurement);
+          }
+        );
 
-      toast.success(initialValues ? "Measurement profile updated." : "Measurement profile saved.");
-      onSuccess(measurement);
+      toast.success(
+        initialValues
+          ? "Measurement profile updated."
+          : "Measurement profile saved."
+      );
+
+      onSuccess(response.measurement);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not save measurement profile.");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not save measurement profile."
+      );
     }
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <div className="space-y-4">
       <div>
         <Label htmlFor="label">Profile Name</Label>
-        <Input id="label" placeholder="e.g. My Shirt Measurements" {...register("label")} />
+        <Input
+          id="label"
+          placeholder="e.g. My Shirt Measurements"
+          {...register("label")}
+        />
         <FieldError message={errors.label?.message} />
       </div>
 
@@ -79,9 +109,15 @@ export function MeasurementForm({ initialValues, onSuccess, onCancel }: Measurem
               type="number"
               step="0.1"
               {...register(field.name, {
-                setValueAs: (value) => (value === "" || value === null ? undefined : Number(value)),
+                setValueAs: (value) =>
+                  value === "" || value === null
+                    ? undefined
+                    : Number(value),
               })}
             />
+            {errors[field.name] && (
+              <FieldError message={errors[field.name]?.message} />
+            )}
           </div>
         ))}
       </div>
@@ -89,18 +125,29 @@ export function MeasurementForm({ initialValues, onSuccess, onCancel }: Measurem
       <div>
         <Label htmlFor="notes">Notes (optional)</Label>
         <Textarea id="notes" {...register("notes")} />
+        <FieldError message={errors.notes?.message} />
       </div>
 
       <div className="flex gap-2">
-        <Button type="submit" isLoading={isSubmitting}>
+        <Button
+          type="button"
+          isLoading={isSubmitting}
+          disabled={isSubmitting}
+          onClick={() => void handleSubmit(onSubmit)()}
+        >
           {initialValues ? "Save Changes" : "Save Measurement Profile"}
         </Button>
-        {onCancel ? (
-          <Button type="button" variant="secondary" onClick={onCancel}>
+
+        {onCancel && (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onCancel}
+          >
             Cancel
           </Button>
-        ) : null}
+        )}
       </div>
-    </form>
+    </div>
   );
 }
